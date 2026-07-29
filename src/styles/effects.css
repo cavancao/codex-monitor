@@ -47,7 +47,9 @@
 .energy-flow {
   fill: none;
   stroke: url(#neon-flow);
-  stroke-width: 10;
+  stroke-width: 8;
+  stroke-linecap: round;
+  opacity: 0.82;
 }
 
 .motion-off .energy-flow {

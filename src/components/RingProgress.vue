@@ -16,7 +16,7 @@ const metrics = computed(() => ringMetrics(props.value, radius));
         </linearGradient>
         <filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
         <mask id="progress-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="200">
-          <circle cx="100" cy="100" :r="radius" fill="none" stroke="#fff" stroke-width="12" :stroke-dasharray="metrics.circumference" :stroke-dashoffset="metrics.offset"/>
+          <circle cx="100" cy="100" :r="radius" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" :stroke-dasharray="metrics.circumference" :stroke-dashoffset="metrics.offset"/>
         </mask>
       </defs>
       <circle class="track" cx="100" cy="100" :r="radius"/>

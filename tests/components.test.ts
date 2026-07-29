@@ -20,6 +20,7 @@ describe("HUD 组件降级", () => {
     expect(wrapper.find("circle.energy-arc").exists()).toBe(false);
     expect(wrapper.find("circle.energy-endpoint").exists()).toBe(false);
     expect(wrapper.find("circle.endpoint").exists()).toBe(false);
+    expect(wrapper.find("#progress-mask circle").attributes("stroke-linecap")).toBe("round");
   });
 
   it("关闭动效时不创建圆环渐变动画", () => {
