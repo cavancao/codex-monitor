@@ -42,7 +42,11 @@ fn read_thread(root: &Path) -> Result<ThreadState, String> {
     let db = latest_state_db(root).ok_or("未发现状态数据库")?;
     let connection = Connection::open_with_flags(db, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX).map_err(|e| e.to_string())?;
     connection.query_row(
-        "SELECT model, reasoning_effort, tokens_used, cli_version, rollout_path FROM threads ORDER BY updated_at_ms DESC LIMIT 1",
+        "SELECT model, reasoning_effort, tokens_used, cli_version, rollout_path
+         FROM threads
+         WHERE model IS NOT NULL AND LOWER(TRIM(model)) <> 'codex-auto-review'
+         ORDER BY updated_at_ms DESC
+         LIMIT 1",
         [], |row| Ok(ThreadState { model: row.get(0)?, reasoning_effort: row.get(1)?, tokens_used: row.get::<_, Option<i64>>(2)?.map(|v| v as f64), cli_version: row.get(3)?, rollout_path: row.get::<_, Option<String>>(4)?.map(PathBuf::from) })
     ).map_err(|e| format!("读取当前线程失败: {e}"))
 }
@@ -121,5 +125,29 @@ mod tests {
         assert!(status.client_version.value.is_some());
         assert!(status.reasoning_speed.value.is_some());
         assert!(status.speed_mode.value.is_some());
+    }
+
+    #[test]
+    fn ignores_internal_auto_review_thread_when_selecting_current_model() {
+        let temp = tempfile::tempdir().unwrap();
+        let db = temp.path().join("state_1.sqlite");
+        let connection = Connection::open(&db).unwrap();
+        connection.execute_batch(
+            "CREATE TABLE threads (
+                model TEXT,
+                reasoning_effort TEXT,
+                tokens_used INTEGER,
+                cli_version TEXT,
+                rollout_path TEXT,
+                updated_at_ms INTEGER
+            );
+            INSERT INTO threads VALUES ('gpt-5.6-sol', 'high', 100, '1.0.0', NULL, 1000);
+            INSERT INTO threads VALUES ('codex-auto-review', 'medium', 20, '1.0.0', NULL, 2000);"
+        ).unwrap();
+        drop(connection);
+
+        let thread = read_thread(temp.path()).unwrap();
+        assert_eq!(thread.model.as_deref(), Some("gpt-5.6-sol"));
+        assert_eq!(thread.reasoning_effort.as_deref(), Some("high"));
     }
 }
