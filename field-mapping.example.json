@@ -1,0 +1,7 @@
+{
+  "base_directory": null,
+  "rules": [
+    { "field": "model", "provider": "file", "relativePath": "state.json", "selector": "$.model", "scale": null },
+    { "field": "remainingPercent", "provider": "file", "relativePath": "state.json", "selector": "$.quota.remaining", "scale": 1 }
+  ]
+}

@@ -1,0 +1,51 @@
+.reset {
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.reset > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.reset-target {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.reset b {
+  color: #c4b5fd;
+  font: 700 17px Consolas, monospace;
+}
+
+.reset .days-value {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  line-height: 1;
+}
+
+.reset .days-value strong {
+  color: #d8ccff;
+  font: 700 26px/1 Consolas, monospace;
+  text-shadow: 0 0 12px #a855f766;
+}
+
+.reset .days-value i {
+  color: #9fb2d6;
+  font: 600 11px/1 "Segoe UI", "Microsoft YaHei", sans-serif;
+  font-style: normal;
+}
+
+.reset .days-value.reset-soon strong,
+.reset .days-value.reset-soon i {
+  color: #4ade80;
+  text-shadow: 0 0 8px #4ade8066;
+}
+
+.reset strong {
+  color: #e5edff;
+  font: 600 12px Consolas, monospace;
+  white-space: nowrap;
+}

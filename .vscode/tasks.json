@@ -1,0 +1,7 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "tauri: dev", "type": "shell", "command": "npm.cmd", "args": ["run", "tauri", "dev"], "isBackground": true, "problemMatcher": { "owner": "tauri", "pattern": { "regexp": "^(.*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$", "file": 1, "line": 2, "column": 3, "severity": 4, "message": 5 }, "background": { "activeOnStart": true, "beginsPattern": "Running BeforeDevCommand", "endsPattern": "Local:\\s+http://localhost:1420" } }, "presentation": { "reveal": "always", "panel": "dedicated" } },
+    { "label": "test: all", "type": "shell", "command": "npm.cmd", "args": ["test"], "problemMatcher": [] }
+  ]
+}
