@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use codex_monitor_lib::{discovery::{run_recon as discover, write_reports}, mapping::{read_json_value, FieldMapping}, status::{CodexStatus, StatusField}};
 use codex_monitor_lib::real;
 use regex::Regex;
@@ -121,6 +123,15 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::tray_menu_ids;
+
+    #[test]
+    fn release_windows_build_uses_gui_subsystem() {
+        let first_line = include_str!("main.rs").lines().next().unwrap();
+        assert_eq!(
+            first_line,
+            "#![cfg_attr(not(debug_assertions), windows_subsystem = \"windows\")]"
+        );
+    }
 
     #[test]
     fn tray_menu_excludes_recon() {
