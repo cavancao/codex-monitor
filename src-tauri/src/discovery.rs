@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, fs::{self, File}, io::Read, net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream}, path::{Path, PathBuf}, time::{Duration, SystemTime}};
 use sysinfo::System;
 use walkdir::WalkDir;
+use crate::data_sources::discovery::{discover_roots, DiscoveryInputs};
 
 const MAX_FILES: usize = 240;
 const MAX_SAMPLE: u64 = 64 * 1024;
@@ -24,10 +25,14 @@ pub struct LoopbackResult { pub port: u16, pub reachable: bool }
 pub struct ReconReport { pub generated_at: DateTime<Utc>, pub roots: Vec<PathBuf>, pub files: Vec<CandidateFile>, pub processes: Vec<CandidateProcess>, pub loopback: Vec<LoopbackResult>, pub recommendation: String }
 
 pub fn system_roots() -> Vec<PathBuf> {
-    let mut roots = Vec::new();
-    if let Some(p) = dirs::config_dir() { roots.push(p); }
-    if let Some(p) = dirs::data_local_dir() { roots.push(p); }
-    if let Some(p) = dirs::cache_dir() { roots.push(p); }
+    DiscoveryInputs::current()
+        .map(|inputs| system_roots_for(&inputs))
+        .unwrap_or_default()
+}
+
+pub fn system_roots_for(inputs: &DiscoveryInputs) -> Vec<PathBuf> {
+    let mut roots = inputs.system_roots.clone();
+    roots.extend(discover_roots(inputs).into_iter().map(|candidate| candidate.path));
     roots.sort(); roots.dedup(); roots.into_iter().filter(|p| p.exists()).collect()
 }
 
@@ -93,7 +98,24 @@ pub fn validate_loopback(host: IpAddr) -> bool { host == IpAddr::V4(Ipv4Addr::LO
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data_sources::discovery::DiscoveryInputs;
     #[test] fn roots_are_dynamic_and_existing() { assert!(system_roots().iter().all(|p| p.exists())); }
     #[test] fn redacts_secrets() { let s=sanitize("me@example.com bearer abcdefghijklmnop"); assert!(!s.contains("me@example.com")); assert!(!s.contains("abcdefghijklmnop")); }
     #[test] fn permits_only_ipv4_loopback() { assert!(validate_loopback("127.0.0.1".parse().unwrap())); assert!(!validate_loopback("8.8.8.8".parse().unwrap())); }
+
+    #[test]
+    fn recon_roots_include_structurally_discovered_codex_root() {
+        let temp = tempfile::tempdir().unwrap();
+        let candidate = temp.path().join("portable-data");
+        fs::create_dir_all(candidate.join("sessions")).unwrap();
+        fs::write(candidate.join("models_cache.json"), "{}").unwrap();
+        rusqlite::Connection::open(candidate.join("state_1.sqlite")).unwrap();
+        let inputs = DiscoveryInputs {
+            home: temp.path().join("home"),
+            codex_home: Some(candidate.clone()),
+            system_roots: vec![],
+        };
+
+        assert!(system_roots_for(&inputs).contains(&candidate));
+    }
 }

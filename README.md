@@ -54,15 +54,17 @@ VITE_DATA_PROVIDER=auto
 npm run recon
 ```
 
-命令在当前目录生成 `recon-report.json` 和 `recon-report.md`，二者已加入 `.gitignore`。应用内“重新侦察”的报告保存到 Tauri 动态解析的应用 data 目录。
+命令在当前目录生成 `recon-report.json` 和 `recon-report.md`，二者已加入 `.gitignore`。应用内“刷新”会强制重新发现数据源，并把脱敏诊断保存为 Tauri 动态解析的应用 data 目录下的 `adaptive-diagnostics.json`。
 
-程序代码不包含 Codex 安装绝对路径。`field-mapping.json` 位于应用 data 目录，`base_directory` 必须来自当次侦察，规则的 `relativePath` 只能是安全相对路径。可参考 `field-mapping.example.json`。当前实现支持只读 JSON path；SQLite/LevelDB 会被 recon 识别为候选，但在没有真实结构证据前不会猜测字段。
+程序代码不包含 Codex 安装绝对路径。运行时优先使用当前用户的 `CODEX_HOME`，再从 home、配置、数据和缓存目录中按结构发现候选来源。SQLite 会先以只读方式检查表和列，再读取当前版本实际存在的兼容字段；单个表、列或日志缺失只影响对应字段。额度信息会从受限深度内的近期 rollout 日志中选择最新可信事件，不依赖旧数据库保存的单一绝对路径。
+
+`field-mapping.json` 仍可位于应用 data 目录作为低优先级补充来源，`base_directory` 必须来自本机侦察，规则的 `relativePath` 只能是安全相对路径。可参考 `field-mapping.example.json`。诊断缓存只包含遮盖后的路径、结构名称和固定错误码，不保存 token、完整邮箱或对话正文。
 
 ## 降级规则
 
 - 首次无可信数据：字段显示 `--`。
 - 已有可信数据后短暂读取失败：保留上次值并标记 stale。
-- 数据目录或结构变化：提示重新侦察。
+- 数据目录或结构变化：点击“刷新”重新发现；其他可用字段继续正常显示。
 - 窗口隐藏：前端时钟与主动刷新暂停或降频。
 
 ## 合规与免责声明

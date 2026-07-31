@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    env,
     fs,
     path::{Path, PathBuf},
     time::SystemTime,
@@ -11,6 +12,32 @@ pub struct DiscoveryInputs {
     pub home: PathBuf,
     pub codex_home: Option<PathBuf>,
     pub system_roots: Vec<PathBuf>,
+}
+
+impl DiscoveryInputs {
+    pub fn current() -> Result<Self, String> {
+        let home = dirs::home_dir().ok_or("无法解析当前用户 home 目录")?;
+        let codex_home = env::var_os("CODEX_HOME")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from);
+        let mut system_roots = [
+            dirs::config_dir(),
+            dirs::data_dir(),
+            dirs::data_local_dir(),
+            dirs::cache_dir(),
+        ]
+        .into_iter()
+        .flatten()
+        .filter(|path| path.is_dir())
+        .collect::<Vec<_>>();
+        system_roots.sort();
+        system_roots.dedup();
+        Ok(Self {
+            home,
+            codex_home,
+            system_roots,
+        })
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

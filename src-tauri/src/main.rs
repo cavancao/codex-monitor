@@ -20,6 +20,10 @@ fn app_data(app: &AppHandle) -> Result<PathBuf, String> {
     app.path().app_data_dir().map_err(|e| format!("无法解析应用数据目录: {e}"))
 }
 
+fn adaptive_diagnostics_path(app_data: &Path) -> PathBuf {
+    app_data.join("adaptive-diagnostics.json")
+}
+
 fn positioned(window: &tauri::WebviewWindow) -> Result<(), String> {
     let monitor = window.primary_monitor().map_err(|e| e.to_string())?.ok_or("未找到主显示器")?;
     let work = monitor.work_area();
@@ -77,9 +81,58 @@ fn read_log_value(base: &Path, relative: &Path, pattern: &str) -> Result<serde_j
 fn get_status(app: AppHandle, provider: String) -> Result<CodexStatus, String> {
     match provider.as_str() {
         "mitm" => Ok(CodexStatus::unsupported("MITM、TLS hook 与读内存首版不实现")),
-        "auto" => real::snapshot().or_else(|_| mapped_status(&app)),
+        "auto" => adaptive_status(&app, false),
         "file" | "log" | "loopback" | "recon" => mapped_status(&app),
         _ => Err("无效 provider".into())
+    }
+}
+
+fn adaptive_status(app: &AppHandle, force_discovery: bool) -> Result<CodexStatus, String> {
+    let data_dir = app_data(app)?;
+    let mut status = real::snapshot_with_diagnostics(
+        Some(adaptive_diagnostics_path(&data_dir)),
+        force_discovery,
+    )?;
+    if let Ok(mapped) = mapped_status(app) {
+        merge_missing_status(&mut status, mapped);
+    }
+    Ok(status)
+}
+
+fn merge_missing_status(target: &mut CodexStatus, fallback: CodexStatus) {
+    merge_missing_field(&mut target.username, fallback.username);
+    merge_missing_field(&mut target.model, fallback.model);
+    merge_missing_field(&mut target.reasoning_effort, fallback.reasoning_effort);
+    merge_missing_field(&mut target.reasoning_speed, fallback.reasoning_speed);
+    merge_missing_field(&mut target.speed_mode, fallback.speed_mode);
+    merge_missing_field(&mut target.subscription, fallback.subscription);
+    merge_missing_field(&mut target.remaining_percent, fallback.remaining_percent);
+    merge_missing_field(&mut target.reset_at, fallback.reset_at);
+    merge_missing_field(&mut target.client_version, fallback.client_version);
+    merge_missing_field(&mut target.monthly_usage, fallback.monthly_usage);
+    merge_missing_field(
+        &mut target.weekly_duration_seconds,
+        fallback.weekly_duration_seconds,
+    );
+    if target.sync_state == "recon-required"
+        && [
+            target.username.value.is_some(),
+            target.model.value.is_some(),
+            target.reasoning_effort.value.is_some(),
+            target.subscription.value.is_some(),
+            target.remaining_percent.value.is_some(),
+        ]
+        .into_iter()
+        .any(|value| value)
+    {
+        target.sync_state = "connected".into();
+        target.message = Some("已连接本地只读状态".into());
+    }
+}
+
+fn merge_missing_field<T>(target: &mut StatusField<T>, fallback: StatusField<T>) {
+    if target.value.is_none() && fallback.value.is_some() {
+        *target = fallback;
     }
 }
 
@@ -88,7 +141,7 @@ fn run_recon(app: AppHandle) -> Result<(), String> {
     let report = discover(); let output = app_data(&app)?.join("recon");
     write_reports(&report, &output)?;
     app.emit("recon-finished", &report).map_err(|e| e.to_string())?;
-    app.emit("status-changed", mapped_status(&app)?).map_err(|e| e.to_string())
+    app.emit("status-changed", adaptive_status(&app, true)?).map_err(|e| e.to_string())
 }
 
 fn main() {
@@ -122,7 +175,16 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::tray_menu_ids;
+    use super::{adaptive_diagnostics_path, tray_menu_ids};
+    use std::path::Path;
+
+    #[test]
+    fn diagnostics_path_is_derived_from_runtime_app_data() {
+        assert_eq!(
+            adaptive_diagnostics_path(Path::new("D:/runtime/app-data")),
+            Path::new("D:/runtime/app-data/adaptive-diagnostics.json")
+        );
+    }
 
     #[test]
     fn release_windows_build_uses_gui_subsystem() {

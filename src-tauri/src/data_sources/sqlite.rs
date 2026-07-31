@@ -119,11 +119,15 @@ fn read_database(path: &Path) -> Result<ThreadCandidates, &'static str> {
         .unwrap_or_else(|_| Utc::now());
     let mut output = ThreadCandidates::default();
     for row in rows.filter_map(Result::ok) {
-        let observed_at = row.4.and_then(epoch_time).unwrap_or(file_time);
-        if let Some(value) = row
+        if row
             .0
-            .filter(|value| !value.trim().eq_ignore_ascii_case("codex-auto-review"))
+            .as_deref()
+            .is_some_and(|value| value.trim().eq_ignore_ascii_case("codex-auto-review"))
         {
+            continue;
+        }
+        let observed_at = row.4.and_then(epoch_time).unwrap_or(file_time);
+        if let Some(value) = row.0 {
             set_newest(
                 &mut output.model,
                 FieldCandidate::new(value, "sqlite", observed_at, 0.86),
@@ -284,5 +288,24 @@ mod tests {
         let result = read_thread_candidates(fixture.path()).unwrap();
 
         assert_eq!(result.value.client_version.unwrap().value, "2.0.0");
+    }
+
+    #[test]
+    fn internal_auto_review_row_does_not_supply_thread_settings() {
+        let fixture = sqlite_fixture(
+            "CREATE TABLE threads(
+                model TEXT,
+                reasoning_effort TEXT,
+                cli_version TEXT,
+                updated_at_ms INTEGER
+            );
+            INSERT INTO threads VALUES('gpt-5.6-sol', 'high', '2.0.0', 1000);
+            INSERT INTO threads VALUES('codex-auto-review', 'medium', '2.0.0', 2000);",
+        );
+
+        let result = read_thread_candidates(fixture.path()).unwrap();
+
+        assert_eq!(result.value.model.unwrap().value, "gpt-5.6-sol");
+        assert_eq!(result.value.reasoning_effort.unwrap().value, "high");
     }
 }
