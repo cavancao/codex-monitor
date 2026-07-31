@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { hudSize, readCollapsed, writeCollapsed } from "../src/lib/collapse";
+import capability from "../src-tauri/capabilities/default.json";
 
 describe("HUD 折叠状态", () => {
   beforeEach(() => localStorage.clear());
@@ -19,5 +20,9 @@ describe("HUD 折叠状态", () => {
   it("展开与折叠使用正确的窗口尺寸", () => {
     expect(hudSize(false)).toEqual({ width: 400, height: 680 });
     expect(hudSize(true)).toEqual({ width: 400, height: 410 });
+  });
+
+  it("允许主窗口切换尺寸", () => {
+    expect(capability.permissions).toContain("core:window:allow-set-size");
   });
 });
