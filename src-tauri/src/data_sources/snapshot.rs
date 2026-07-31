@@ -2,7 +2,7 @@ use super::{
     auth::read_auth_candidates,
     candidate::FieldCandidate,
     diagnostics::{write_diagnostics, DiagnosticReport, DiagnosticRoot},
-    discovery::{discover_roots, DiscoveryInputs, RootEvidence},
+    discovery::{discover_roots, DataRootCandidate, DiscoveryInputs, RootEvidence},
     rollout::{discover_rollouts, read_rollout_candidates},
     sqlite::read_thread_candidates,
 };
@@ -28,6 +28,28 @@ pub struct SnapshotOptions {
     pub diagnostics_path: Option<PathBuf>,
 }
 
+#[derive(Default)]
+pub struct SnapshotCollector {
+    roots: Option<Vec<DataRootCandidate>>,
+}
+
+impl SnapshotCollector {
+    pub fn collect(
+        &mut self,
+        inputs: &DiscoveryInputs,
+        options: &SnapshotOptions,
+    ) -> Result<CodexStatus, String> {
+        let cache_is_valid = self
+            .roots
+            .as_ref()
+            .is_some_and(|roots| roots.iter().all(|root| root.path.is_dir()));
+        if options.force_discovery || !cache_is_valid {
+            self.roots = Some(discover_roots(inputs));
+        }
+        collect_snapshot_from_roots(inputs, options, self.roots.as_deref().unwrap_or_default())
+    }
+}
+
 #[derive(Clone, Copy)]
 enum StatusKey {
     Username,
@@ -45,8 +67,15 @@ pub fn collect_snapshot(
     inputs: &DiscoveryInputs,
     options: &SnapshotOptions,
 ) -> Result<CodexStatus, String> {
-    let _ = options.force_discovery;
     let roots = discover_roots(inputs);
+    collect_snapshot_from_roots(inputs, options, &roots)
+}
+
+fn collect_snapshot_from_roots(
+    inputs: &DiscoveryInputs,
+    options: &SnapshotOptions,
+    roots: &[DataRootCandidate],
+) -> Result<CodexStatus, String> {
     let mut candidates = SnapshotCandidates::default();
     let mut report = DiagnosticReport::default();
 
@@ -71,10 +100,7 @@ pub fn collect_snapshot(
             &mut candidates.reasoning_effort,
             sqlite.value.reasoning_effort,
         );
-        push_option(
-            &mut candidates.client_version,
-            sqlite.value.client_version,
-        );
+        push_option(&mut candidates.client_version, sqlite.value.client_version);
         report.issues.extend(sqlite.issues);
 
         let rollout_paths = discover_rollouts(&root.path, &hinted_paths);
@@ -85,27 +111,18 @@ pub fn collect_snapshot(
             rollout.value.reasoning_effort,
         );
         push_option(&mut candidates.speed_mode, rollout.value.speed_mode);
-        push_option(
-            &mut candidates.subscription,
-            rollout.value.subscription,
-        );
+        push_option(&mut candidates.subscription, rollout.value.subscription);
         push_option(
             &mut candidates.remaining_percent,
             rollout.value.remaining_percent,
         );
         push_option(&mut candidates.reset_at, rollout.value.reset_at);
-        push_option(
-            &mut candidates.client_version,
-            rollout.value.client_version,
-        );
+        push_option(&mut candidates.client_version, rollout.value.client_version);
         report.issues.extend(rollout.issues);
 
         let auth = read_auth_candidates(&root.path);
         push_option(&mut candidates.username, auth.value.username);
-        push_option(
-            &mut candidates.subscription,
-            auth.value.subscription,
-        );
+        push_option(&mut candidates.subscription, auth.value.subscription);
         report.issues.extend(auth.issues);
     }
 
@@ -120,25 +137,13 @@ pub fn build_status(candidates: SnapshotCandidates) -> CodexStatus {
     let mut status = CodexStatus {
         username: into_status(candidates.username, StatusKey::Username),
         model: into_status(candidates.model, StatusKey::Model),
-        reasoning_effort: into_status(
-            candidates.reasoning_effort,
-            StatusKey::ReasoningEffort,
-        ),
-        reasoning_speed: into_status(
-            candidates.reasoning_speed,
-            StatusKey::ReasoningSpeed,
-        ),
+        reasoning_effort: into_status(candidates.reasoning_effort, StatusKey::ReasoningEffort),
+        reasoning_speed: into_status(candidates.reasoning_speed, StatusKey::ReasoningSpeed),
         speed_mode: into_status(candidates.speed_mode, StatusKey::SpeedMode),
         subscription: into_status(candidates.subscription, StatusKey::Subscription),
-        remaining_percent: into_status(
-            candidates.remaining_percent,
-            StatusKey::RemainingPercent,
-        ),
+        remaining_percent: into_status(candidates.remaining_percent, StatusKey::RemainingPercent),
         reset_at: into_status(candidates.reset_at, StatusKey::ResetAt),
-        client_version: into_status(
-            candidates.client_version,
-            StatusKey::ClientVersion,
-        ),
+        client_version: into_status(candidates.client_version, StatusKey::ClientVersion),
         ..CodexStatus::default()
     };
     let available = [
@@ -163,10 +168,7 @@ pub fn build_status(candidates: SnapshotCandidates) -> CodexStatus {
     status
 }
 
-fn into_status<T>(
-    candidates: Vec<FieldCandidate<T>>,
-    key: StatusKey,
-) -> StatusField<T> {
+fn into_status<T>(candidates: Vec<FieldCandidate<T>>, key: StatusKey) -> StatusField<T> {
     let Some(candidate) = select_candidate(candidates, key) else {
         return StatusField::default();
     };
@@ -204,10 +206,7 @@ fn source_priority(key: StatusKey, source: &str) -> u8 {
             | StatusKey::ClientVersion,
             "rollout",
         ) => 4,
-        (
-            StatusKey::Model | StatusKey::ReasoningEffort | StatusKey::ClientVersion,
-            "sqlite",
-        ) => 3,
+        (StatusKey::Model | StatusKey::ReasoningEffort | StatusKey::ClientVersion, "sqlite") => 3,
         (StatusKey::RemainingPercent | StatusKey::ResetAt, "rollout") => 4,
         (_, "mapping") => 1,
         _ => 2,
@@ -233,9 +232,12 @@ fn evidence_name(value: &RootEvidence) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_status, SnapshotCandidates};
+    use super::{build_status, SnapshotCandidates, SnapshotCollector, SnapshotOptions};
     use crate::data_sources::candidate::FieldCandidate;
+    use crate::data_sources::discovery::DiscoveryInputs;
     use chrono::{TimeZone, Utc};
+    use rusqlite::Connection;
+    use std::fs;
 
     fn utc(epoch: i64) -> chrono::DateTime<Utc> {
         Utc.timestamp_opt(epoch, 0).single().unwrap()
@@ -277,5 +279,53 @@ mod tests {
         assert_eq!(status.reasoning_effort.value, None);
         assert_eq!(status.remaining_percent.value, Some(87.0));
         assert_eq!(status.sync_state, "connected");
+    }
+
+    #[test]
+    fn force_discovery_replaces_cached_roots() {
+        let temp = tempfile::tempdir().unwrap();
+        let first = temp.path().join("first-client-state");
+        let second = temp.path().join("second-client-state");
+        write_model_fixture(&first, "gpt-first");
+        write_model_fixture(&second, "gpt-second");
+        let mut inputs = DiscoveryInputs {
+            home: temp.path().join("empty-home"),
+            codex_home: Some(first),
+            system_roots: vec![],
+        };
+        let mut collector = SnapshotCollector::default();
+
+        let first_status = collector
+            .collect(&inputs, &SnapshotOptions::default())
+            .unwrap();
+        inputs.codex_home = Some(second);
+        let cached_status = collector
+            .collect(&inputs, &SnapshotOptions::default())
+            .unwrap();
+        let refreshed_status = collector
+            .collect(
+                &inputs,
+                &SnapshotOptions {
+                    force_discovery: true,
+                    diagnostics_path: None,
+                },
+            )
+            .unwrap();
+
+        assert_eq!(first_status.model.value.as_deref(), Some("gpt-first"));
+        assert_eq!(cached_status.model.value.as_deref(), Some("gpt-first"));
+        assert_eq!(refreshed_status.model.value.as_deref(), Some("gpt-second"));
+    }
+
+    fn write_model_fixture(root: &std::path::Path, model: &str) {
+        fs::create_dir_all(root.join("sessions")).unwrap();
+        fs::write(root.join("models_cache.json"), "{}").unwrap();
+        let connection = Connection::open(root.join("state_1.sqlite")).unwrap();
+        connection
+            .execute_batch(&format!(
+                "CREATE TABLE threads(model TEXT, updated_at_ms INTEGER);
+                 INSERT INTO threads VALUES('{model}', 1800000000000);"
+            ))
+            .unwrap();
     }
 }

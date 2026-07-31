@@ -1,11 +1,16 @@
 use crate::{
     data_sources::{
         discovery::DiscoveryInputs,
-        snapshot::{collect_snapshot, SnapshotOptions},
+        snapshot::{SnapshotCollector, SnapshotOptions},
     },
     status::CodexStatus,
 };
-use std::path::PathBuf;
+use std::{
+    path::PathBuf,
+    sync::{Mutex, OnceLock},
+};
+
+static COLLECTOR: OnceLock<Mutex<SnapshotCollector>> = OnceLock::new();
 
 pub fn snapshot() -> Result<CodexStatus, String> {
     snapshot_with_diagnostics(None, false)
@@ -16,13 +21,17 @@ pub fn snapshot_with_diagnostics(
     force_discovery: bool,
 ) -> Result<CodexStatus, String> {
     let inputs = DiscoveryInputs::current()?;
-    collect_snapshot(
-        &inputs,
-        &SnapshotOptions {
-            force_discovery,
-            diagnostics_path,
-        },
-    )
+    COLLECTOR
+        .get_or_init(|| Mutex::new(SnapshotCollector::default()))
+        .lock()
+        .map_err(|_| "数据源缓存不可用".to_string())?
+        .collect(
+            &inputs,
+            &SnapshotOptions {
+                force_discovery,
+                diagnostics_path,
+            },
+        )
 }
 
 #[cfg(test)]
@@ -30,7 +39,7 @@ fn snapshot_for_inputs(
     inputs: &DiscoveryInputs,
     diagnostics_path: Option<&std::path::Path>,
 ) -> Result<CodexStatus, String> {
-    collect_snapshot(
+    crate::data_sources::snapshot::collect_snapshot(
         inputs,
         &SnapshotOptions {
             force_discovery: true,
