@@ -1,9 +1,11 @@
 import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import RingProgress from "../src/components/RingProgress.vue";
 import InfoCard from "../src/components/InfoCard.vue";
 import TitleBar from "../src/components/TitleBar.vue";
 import App from "../src/App.vue";
+
+beforeEach(() => localStorage.clear());
 
 describe("HUD 组件降级", () => {
   it("圆环空值显示 -- 且不绘制伪造进度", () => {
@@ -64,6 +66,29 @@ describe("HUD 组件降级", () => {
     const wrapper = mount(App);
     const labels = wrapper.findAll(".info-card > span").map(node => node.text());
     expect(labels).toEqual(["当前模型", "订阅套餐", "推理强度", "速度", "用户名称", "客户端版本"]);
+    wrapper.unmount();
+  });
+
+  it("折叠后仅保留标题、连接状态和剩余用量圆环", async () => {
+    const wrapper = mount(App);
+    await wrapper.get('[aria-label="折叠详情"]').trigger("click");
+
+    expect(wrapper.find(".titlebar").exists()).toBe(true);
+    expect(wrapper.find(".notice").exists()).toBe(true);
+    expect(wrapper.find(".ring-card").exists()).toBe(true);
+    expect(wrapper.find(".info-grid").exists()).toBe(false);
+    expect(wrapper.find(".reset").exists()).toBe(false);
+    expect(wrapper.find("footer").exists()).toBe(false);
+    expect(wrapper.find('[aria-label="展开详情"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("挂载时恢复上次折叠状态", () => {
+    localStorage.setItem("codex-monitor:collapsed", "true");
+    const wrapper = mount(App);
+
+    expect(wrapper.find(".shell").classes()).toContain("collapsed");
+    expect(wrapper.find(".info-grid").exists()).toBe(false);
     wrapper.unmount();
   });
 });
