@@ -6,3 +6,4 @@ recon-report.json
 recon-report.md
 *.log
 docs/superpowers/
+.worktrees/
