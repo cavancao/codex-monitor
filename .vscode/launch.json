@@ -1,6 +1,6 @@
 {
   "version": "0.2.0",
   "configurations": [
-    { "name": "Codex Monitor：F5 启动", "type": "msedge", "request": "launch", "url": "http://localhost:1420", "webRoot": "${workspaceFolder}/src", "preLaunchTask": "tauri: dev", "presentation": { "group": "Codex Monitor", "order": 1 } }
+    { "name": "Codex Monitor：F5 启动", "type": "node-terminal", "request": "launch", "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\tauri-dev.ps1", "cwd": "${workspaceFolder}", "presentation": { "group": "Codex Monitor", "order": 1 } }
   ]
 }
