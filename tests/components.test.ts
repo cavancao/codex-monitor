@@ -74,7 +74,7 @@ describe("HUD 组件降级", () => {
     await wrapper.get('[aria-label="折叠详情"]').trigger("click");
 
     expect(wrapper.find(".titlebar").exists()).toBe(true);
-    expect(wrapper.find(".notice").exists()).toBe(true);
+    expect(wrapper.find(".state-dot").exists()).toBe(true);
     expect(wrapper.find(".ring-card").exists()).toBe(true);
     expect(wrapper.find(".info-grid").exists()).toBe(false);
     expect(wrapper.find(".reset").exists()).toBe(false);
